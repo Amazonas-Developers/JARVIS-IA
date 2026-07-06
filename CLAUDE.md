@@ -13,7 +13,7 @@ Migrado el **2026-07-06** desde un único archivo standalone (`../lm-studio-chat
 | React | 19.2 | |
 | Vite | 8.1 | Plugin `@vitejs/plugin-react` |
 | Tailwind CSS | 4.3 | Vía `@tailwindcss/vite`; sin `tailwind.config.js` (config CSS-first con `@theme`) |
-| React Router | 8.1 | Modo declarativo (`BrowserRouter` + `Routes`), importar desde `react-router` |
+| React Router | 8.1 | Modo declarativo con `HashRouter` (rutas `/#/...` para hosting estático en Netlify), importar desde `react-router` |
 | Redux Toolkit | 2.12 | Configurado pero aún sin uso real (ver abajo) |
 | TypeScript | 6.0 | Estricto; alias `@/` → `src/` (definido en `tsconfig.json` y `vite.config.ts`) |
 | highlight.js | 11.x | Resaltado de código; build `lib/common` (~40 lenguajes) + tema `github-dark` |
@@ -104,6 +104,10 @@ Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); l
 ## Historial
 
 > Añadir una entrada por cada sesión de trabajo relevante, la más reciente arriba.
+
+### 2026-07-06 — HashRouter para Netlify
+- `BrowserRouter` → `HashRouter` en `main.tsx`: las rutas van tras `#` (`/#/dashboard`), con lo que el hosting estático de Netlify siempre sirve `index.html` y no hay 404 al recargar o entrar por URL directa.
+- Alternativa si algún día se quieren URLs limpias: volver a `BrowserRouter` + archivo `public/_redirects` con `/* /index.html 200`.
 
 ### 2026-07-06 — Rediseño Amazonas 365: tema claro/oscuro + glassmorphism + iconos
 - Nueva arquitectura CSS basada en jarvis365.net: tokens `--a365-*` por modo mapeados con `@theme inline`; claro = verdes/blancos/grises, oscuro = base oscura con toques verdes. Colores de marca extraídos del logo oficial (#327B32 / #B8CE30).
