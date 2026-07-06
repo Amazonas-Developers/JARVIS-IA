@@ -1,0 +1,162 @@
+# Chat con LM Studio
+
+Cliente de chat en el navegador para un servidor **LM Studio** remoto (API compatible con OpenAI), con historial de conversaciones persistente y búsqueda web opcional vía **Tavily**.
+
+## Origen del proyecto
+
+Migrado el **2026-07-06** desde un único archivo standalone (`../lm-studio-chat.html`, HTML + CSS + JS vanilla en ~800 líneas) a un proyecto React. El archivo original se conserva en la carpeta padre como referencia. La funcionalidad es 1:1 con el original y **se mantienen las mismas claves de localStorage**, así que el historial guardado con la versión HTML sigue funcionando aquí.
+
+## Stack
+
+| Tecnología | Versión | Notas |
+|---|---|---|
+| React | 19.2 | |
+| Vite | 8.1 | Plugin `@vitejs/plugin-react` |
+| Tailwind CSS | 4.3 | Vía `@tailwindcss/vite`; sin `tailwind.config.js` (config CSS-first con `@theme`) |
+| React Router | 8.1 | Modo declarativo (`BrowserRouter` + `Routes`), importar desde `react-router` |
+| Redux Toolkit | 2.12 | Configurado pero aún sin uso real (ver abajo) |
+| TypeScript | 6.0 | Estricto; alias `@/` → `src/` (definido en `tsconfig.json` y `vite.config.ts`) |
+| highlight.js | 11.x | Resaltado de código; build `lib/common` (~40 lenguajes) + tema `github-dark` |
+| react-markdown + remark-gfm | 10.x / 4.x | Texto enriquecido en respuestas del asistente (tablas, listas, negritas...) |
+| axios | 1.x | Instancia `http` en `libs/http.ts` para backend con sesiones (aún sin uso real) |
+| lucide-react | última | Iconos de toda la UI (botones, paneles, páginas) |
+
+## Comandos
+
+```bash
+npm run dev       # servidor de desarrollo
+npm run build     # tsc (verificación de tipos) + build de producción en dist/
+npm run preview   # sirve el build de producción
+```
+
+No hay tests ni linter configurados todavía.
+
+## Estructura
+
+```
+src/
+├── main.tsx                 # Entry: StrictMode + Redux Provider + BrowserRouter
+├── App.tsx                  # Solo renderiza AppRoutes
+├── styles/index.css         # Tailwind + tema (@theme) + globales (scrollbar, body)
+├── routes/
+│   ├── AppRoutes.tsx        # Definición central de rutas
+│   └── pages/               # / → WelcomePage · /login → LoginPage · /dashboard → DashboardPage (el chat) · * → NotFoundPage
+├── components/
+│   ├── brand/               # Logo Amazonas 365 (BrandLogo PNG, BrandMark SVG, BrandWordmark)
+│   ├── ui/                  # Primitivas reutilizables (Button con velo, Field, ThemeToggle)
+│   ├── layout/              # Sidebar (conversaciones), Header (estado conexión)
+│   ├── config/              # ConfigPanel (modelo, conexión, toggle búsqueda web)
+│   └── chat/                # ChatWindow, MessageBubble, ChatInput, CodeBlock, MarkdownContent
+├── hooks/
+│   ├── useChat.ts           # Estado central: conversaciones, mensajes, envío al modelo
+│   ├── useConnection.ts     # Comprobación de conexión y lista de modelos
+│   └── useSettings.ts       # Configuración (URL, temperatura, tokens, Tavily)
+├── libs/
+│   ├── lmStudio.ts          # Cliente API LM Studio (/v1/models, /v1/chat/completions)
+│   ├── tavily.ts            # Búsqueda web + formateo de resultados como contexto
+│   ├── conversations.ts     # Títulos, ids, export/import de conversaciones
+│   ├── env.ts               # Acceso tipado a variables de entorno (único punto de lectura)
+│   ├── http.ts              # Instancia axios con withCredentials (sesiones express-session)
+│   ├── storage.ts           # Todo el acceso a localStorage (claves centralizadas)
+│   └── utils.ts             # getErrorMessage, ids de mensajes UI
+├── store/                   # Redux Toolkit (preparado para uso futuro)
+│   ├── index.ts             # configureStore + tipos RootState/AppDispatch
+│   ├── hooks.ts             # useAppSelector / useAppDispatch tipados
+│   └── slices/appSlice.ts   # Slice de ejemplo (plantilla para nuevos slices)
+└── types/
+    ├── chat.ts              # ChatMessage, UiMessage, Conversation...
+    └── api.ts               # Tipos de las APIs de LM Studio y Tavily
+```
+
+## Configuración por variables de entorno
+
+La URL del servidor, la temperatura, el máx. de tokens y la API key de Tavily **no se editan en la GUI**: se configuran en `.env` (plantilla documentada en `.env.example`) y solo el selector de **Modelo** queda visible para el usuario.
+
+| Variable | Uso | Fallback interno |
+|---|---|---|
+| `VITE_LM_STUDIO_URL` | URL del servidor LM Studio | `http://192.168.1.50:1234` |
+| `VITE_TEMPERATURE` | Temperatura del modelo | `0.7` |
+| `VITE_MAX_TOKENS` | Máx. tokens por respuesta | `1024` |
+| `VITE_TAVILY_API_KEY` | Key de búsqueda web | vacío (la UI avisa si se activa la búsqueda sin key) |
+| `VITE_API_URL` | Backend con sesiones (axios `http`) | vacío (peticiones relativas al origen / proxy) |
+
+Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); los tipos de las variables están en `src/vite-env.d.ts`; se inyectan **en build**, así que cambiar el `.env` exige reiniciar `npm run dev`; al ser una SPA los valores acaban en el bundle JS (no poner secretos sensibles).
+
+## Arquitectura y decisiones
+
+- **Estado en hooks, no en Redux (por ahora).** Toda la lógica vive en `useChat` / `useConnection` / `useSettings` y `DashboardPage` los orquesta pasando props. Redux está instalado, configurado y conectado (Provider en `main.tsx`) solo para uso futuro; para migrar estado global: crear slice en `src/store/slices/`, registrarlo en `src/store/index.ts` y consumir con los hooks tipados de `src/store/hooks.ts`.
+- **Mensajes persistidos vs. mensajes de UI.** `ChatMessage` (user/assistant) es lo que se guarda y se envía al modelo. `UiMessage` añade tipos efímeros (`system`, `error`, `web`) que solo se muestran en pantalla y nunca se persisten. Al usar búsqueda web, el contexto se antepone como mensaje `system` únicamente en la petición, sin ensuciar el historial.
+- **Tailwind 4 CSS-first con tema Amazonas 365 (jarvis365.net).** No hay `tailwind.config.js`; toda la arquitectura vive en `src/styles/index.css`: (1) tokens crudos `--a365-*` por modo (`:root` = claro con verdes/blancos/grises, `.dark` = oscuro con toques verdes), (2) `@theme inline` los expone como utilidades (`bg-panel`, `text-muted`, `border-line`, `bg-accent-strong`...) que se re-colorean solas al cambiar de tema, (3) tokens fijos (`brand` #327B32, `lime` #B8CE30 — extraídos del logo oficial — y `code/code-header/code-line` para bloques de código siempre oscuros) y la utilidad `.glass` (glassmorphism: fondo translúcido + blur + color de borde incluido; usar `glass border`, sin `border-line`). El fondo del `body` lleva resplandores radiales de marca que dan textura al glass.
+- **Modo claro/oscuro**: clase `dark` en `<html>` (`@custom-variant dark` en index.css). `useTheme` la conmuta y persiste en localStorage (`a365_theme`); un script inline en `index.html` aplica el tema guardado antes del primer render (anti-parpadeo) — si se cambia la clave hay que tocar ambos sitios. El botón `ThemeToggle` está en el Header del dashboard. Sin preferencia guardada se respeta `prefers-color-scheme`.
+- **Identidad visual**: `components/brand/Logo.tsx` — `BrandLogo` usa el PNG oficial descargado de jarvis365.net (`src/assets/amazonas365-logo.png`, hero de la bienvenida), `BrandMark` es el isotipo (anillo verde + hoja lima) recreado en SVG (login) y `BrandWordmark` combina isotipo + texto (header del dashboard). Iconos: lucide-react en botones y elementos (los `Button` aceptan un icono como child y tienen "velo" hover vía `::after`).
+- **localStorage centralizado** en `src/libs/storage.ts` (objeto `STORAGE_KEYS`). No usar `localStorage` directo fuera de ese archivo. Claves activas: `lmstudio_conversations_v1`, `lmstudio_current_conversation_id`, `web_search_enabled`. (Las claves `lmstudio_url` y `tavily_key` del HTML original quedaron obsoletas al pasar esos valores al `.env` y simplemente se ignoran.)
+- **`useChat` usa refs** (`messagesRef`, `currentIdRef`) además de estado para leer valores actuales dentro de flujos async (evita closures obsoletos durante el envío).
+- **Texto enriquecido en mensajes `assistant`**: `MarkdownContent.tsx` renderiza el Markdown con react-markdown + remark-gfm (negritas, títulos, listas, tablas, citas, hr, código inline). Los estilos de esos elementos viven en `styles/index.css` bajo `.markdown-body` (no se usa @tailwindcss/typography). Los bloques ```` ```código ```` se interceptan en el componente `pre` y se delegan en `CodeBlock.tsx`, que resalta con highlight.js — usa el lenguaje del fence si existe y es conocido, y si no lo autodetecta con `highlightAuto`. Un fence sin cerrar (respuesta cortada) también se trata como código (CommonMark). El HTML resaltado lo genera highlight.js a partir de texto plano (seguro para `dangerouslySetInnerHTML`); react-markdown no interpreta HTML crudo del modelo. El resto de tipos de mensaje (user/system/error/web) siguen siendo texto plano con `whitespace-pre-wrap`.
+
+## Comportamiento clave (heredado del original)
+
+- Al cargar: restaura la última conversación abierta (o la más reciente, o crea una nueva) y comprueba la conexión automáticamente contra `VITE_LM_STUDIO_URL`.
+- Las conversaciones nuevas vacías **no** aparecen en el sidebar hasta que tienen al menos un mensaje.
+- Enter envía, Shift+Enter hace salto de línea; el textarea crece hasta 160px.
+- Export descarga un `.json` con todas las conversaciones; import fusiona y renombra ids duplicados para no sobrescribir.
+- Si la búsqueda web falla, se avisa y se continúa sin contexto web (no bloquea el envío).
+
+## Historial
+
+> Añadir una entrada por cada sesión de trabajo relevante, la más reciente arriba.
+
+### 2026-07-06 — Rediseño Amazonas 365: tema claro/oscuro + glassmorphism + iconos
+- Nueva arquitectura CSS basada en jarvis365.net: tokens `--a365-*` por modo mapeados con `@theme inline`; claro = verdes/blancos/grises, oscuro = base oscura con toques verdes. Colores de marca extraídos del logo oficial (#327B32 / #B8CE30).
+- Modo claro/oscuro con `useTheme` + `ThemeToggle` en el header del dashboard; persiste en localStorage (`a365_theme`) con script anti-parpadeo en index.html.
+- Glassmorphism (`.glass`) en header, panel de configuración, footer del chat, tarjetas de bienvenida y card del login; el body lleva resplandores de marca de fondo.
+- Instalado lucide-react; iconos en todos los botones/elementos y velo hover en `Button`. Logo oficial descargado del sitio (assets) + isotipo recreado en SVG (`components/brand/Logo.tsx`).
+- Los bloques de código quedan siempre oscuros (tokens fijos `code*`) para conservar el resaltado en modo claro.
+
+### 2026-07-06 — Tres rutas: bienvenida, login y dashboard
+- `/` es ahora `WelcomePage` (landing con features y CTAs); el cliente de chat completo se movió a `/dashboard` (`ChatPage` renombrada a `DashboardPage`, sin cambios de lógica).
+- Nueva `/login` (`LoginPage`): formulario estilizado (usuario/correo + contraseña) que hace `POST /auth/login` con la instancia axios `http` (cookie de sesión de express-session) y navega a `/dashboard` si responde OK.
+- El dashboard NO está protegido todavía: sin backend de sesiones se puede entrar directo (ver pendientes).
+
+### 2026-07-06 — Instancia axios para autenticación por sesión (uso futuro)
+- Añadido axios con la instancia `http` (`src/libs/http.ts`): `withCredentials: true` para enviar/recibir la cookie de sesión de un backend con express-session.
+- Nueva variable `VITE_API_URL` (vacía = mismo origen / proxy de Vite); interceptor que normaliza errores usando el `message` que devuelva el servidor.
+- Los requisitos del backend (cors con `credentials: true` y origin exacto, `sameSite`/`secure` de la cookie) están documentados en el propio archivo.
+- Todavía no la consume ningún componente; el chat con LM Studio sigue usando `fetch` en `libs/lmStudio.ts`.
+
+### 2026-07-06 — Texto enriquecido (Markdown) en las respuestas
+- Añadidos react-markdown + remark-gfm: las respuestas del asistente renderizan negritas, títulos, listas, tablas, citas, separadores y código inline.
+- El resaltado de sintaxis se conserva: los ```` ```fences ```` se interceptan vía el componente `pre` y siguen pasando por `CodeBlock` (highlight.js + autodetección).
+- Nuevo `MarkdownContent.tsx`; estilos `.markdown-body` en `index.css`; eliminado `libs/codeBlocks.ts` (el parser manual ya no hace falta).
+
+### 2026-07-06 — Toggle de internet integrado en el panel de configuración
+- El checkbox «Activar acceso a internet» se movió a la misma fila que los botones «Comprobar conexión» / «Vaciar esta conversación» (dentro de `ConfigPanel`).
+- Eliminado el componente `WebSearchPanel` (su aviso de key faltante ahora vive en `ConfigPanel`).
+
+### 2026-07-06 — Configuración por variables de entorno y GUI simplificada
+- URL del servidor, temperatura, máx. tokens y API key de Tavily pasan a `.env` (`VITE_*`), con acceso centralizado en `src/libs/env.ts` y tipos en `src/vite-env.d.ts`.
+- Eliminados de la GUI los campos correspondientes: solo queda el selector de **Modelo**, los botones (Comprobar conexión / Vaciar conversación) y el toggle de búsqueda web.
+- El panel de búsqueda web avisa si se activa sin `VITE_TAVILY_API_KEY` configurada.
+- `storage.ts` ya no guarda URL ni key de Tavily (claves antiguas ignoradas); creados `.env` (local) y `.env.example` (plantilla versionable).
+
+### 2026-07-06 — Resaltado de sintaxis en código generado por el modelo
+- Añadido highlight.js (build `common`): bloques ```` ```lang ```` en respuestas del asistente se renderizan como `CodeBlock` con resaltado.
+- Detección automática de lenguaje (`highlightAuto`) cuando el fence no declara lenguaje o no se reconoce.
+- Cada bloque muestra el lenguaje detectado y un botón «Copiar».
+- Nuevos archivos: `src/libs/codeBlocks.ts` (parser) y `src/components/chat/CodeBlock.tsx`.
+
+### 2026-07-06 — Migración inicial
+- Migrado `lm-studio-chat.html` (vanilla) a React 19 + Vite 8 + TypeScript 6 + Tailwind CSS 4.
+- CSS separado del markup: tema en `@theme` (index.css) + utilidades Tailwind en componentes.
+- Añadidos React Router 8 (rutas `/` y 404) y Redux Toolkit (configurado, sin uso real todavía).
+- Estructura creada: `components/`, `hooks/`, `libs/`, `routes/`, `store/`, `types/`, `styles/`.
+- Paridad funcional completa con el HTML original; mismas claves de localStorage.
+
+## Ideas / pendientes
+
+- [ ] Usar streaming (`stream: true`) para mostrar la respuesta del modelo token a token.
+- [ ] Migrar configuración y/o conversaciones a Redux cuando crezca la app.
+- [ ] Añadir ESLint + Prettier.
+- [ ] Sidebar plegable en pantallas pequeñas (el slice `app` ya tiene `sidebarVisible`).
+- [ ] Recrear el icono engranaje+circuitos (imagen de referencia del usuario) como SVG propio; hoy ese motivo se representa con lucide (`Cog`/`Cpu`) en la bienvenida.
+- [ ] Proteger `/dashboard` con la sesión real (guard/redirect a `/login` usando `GET /auth/me`) y guardar el usuario en un `authSlice` de Redux.
+- [ ] Botón de cerrar sesión en el Header del dashboard (`POST /auth/logout`).
