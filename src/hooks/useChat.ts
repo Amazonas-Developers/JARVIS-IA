@@ -19,7 +19,7 @@ import {
   makeTitleFromMessages,
   mergeImportedConversations,
 } from '@/libs/conversations';
-import { createChatCompletion } from '@/libs/lmStudio';
+import { createChatCompletion, unloadModel } from '@/libs/lmStudio';
 import { formatSearchResults, searchWeb } from '@/libs/tavily';
 import { getErrorMessage, nextUiMessageId } from '@/libs/utils';
 
@@ -30,6 +30,13 @@ export interface SendMessageOptions {
   maxTokens: number;
   /** null = búsqueda web desactivada. */
   webSearch: { apiKey: string } | null;
+  /** false si el modelo aún no está cargado en el servidor (carga JIT). */
+  modelIsLoaded?: boolean;
+  /**
+   * Instancias a descargar ANTES de enviar, para liberar VRAM cuando se
+   * cambia a un modelo no cargado (intercambio en vez de acumulación).
+   */
+  unloadInstanceIds?: string[];
 }
 
 export interface Chat {
@@ -269,7 +276,35 @@ export function useChat(): Chat {
       }
     }
 
-    const thinkingId = pushUi('system', 'Generando respuesta...');
+    // Cambio de modelo: descarga las instancias en memoria antes de que la
+    // carga JIT monte el nuevo, para no agotar la VRAM del servidor.
+    if (
+      options.modelIsLoaded === false &&
+      options.unloadInstanceIds &&
+      options.unloadInstanceIds.length > 0
+    ) {
+      const unloadingId = pushUi(
+        'system',
+        'Liberando memoria del servidor: descargando el modelo anterior...',
+      );
+      const results = await Promise.allSettled(
+        options.unloadInstanceIds.map((id) => unloadModel(options.baseUrl, id)),
+      );
+      removeUi(unloadingId);
+      if (results.some((r) => r.status === 'rejected')) {
+        pushUi(
+          'error',
+          'No se pudo descargar el modelo anterior; se intentará cargar el nuevo de todos modos.',
+        );
+      }
+    }
+
+    const thinkingId = pushUi(
+      'system',
+      options.modelIsLoaded === false
+        ? `Cargando el modelo "${options.model}" en el servidor y generando respuesta... (puede tardar unos minutos)`
+        : 'Generando respuesta...',
+    );
     try {
       const reply = await createChatCompletion(options.baseUrl, {
         model: options.model,

@@ -95,6 +95,8 @@ Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); l
 
 ## Comportamiento clave (heredado del original)
 
+- **Cambio de modelo desde el frontend con intercambio de memoria**: `fetchModels` intenta en orden `GET /api/v1/models` (todos los modelos + instancias cargadas), `GET /api/v0/models` (modelos + estado) y `/v1/models` (solo cargados, LM Studio antiguo), filtrando embeddings. El selector marca ● cargado / ○ disponible. Al enviar con un modelo NO cargado, `useChat` primero descarga las instancias en memoria con `POST /api/v1/models/unload {instance_id}` (libera la VRAM — sin esto la carga del segundo modelo da HTTP 400 por memoria insuficiente) y después la petición de chat dispara la carga JIT del nuevo (requiere «Just-in-Time model loading» activo en Developer del servidor). La UI avisa de la descarga/carga y `connection.refresh()` re-lee los estados tras cada respuesta. Flujo completo verificado contra el servidor real (unload instantáneo; carga JIT del 12B ≈ 56 s).
+
 - Al cargar: restaura la última conversación abierta (o la más reciente, o crea una nueva) y comprueba la conexión automáticamente contra `VITE_LM_STUDIO_URL`.
 - Las conversaciones nuevas vacías **no** aparecen en el sidebar hasta que tienen al menos un mensaje.
 - Enter envía, Shift+Enter hace salto de línea; el textarea crece hasta 160px.
@@ -104,6 +106,18 @@ Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); l
 ## Historial
 
 > Añadir una entrada por cada sesión de trabajo relevante, la más reciente arriba.
+
+### 2026-07-08 — Intercambio de modelos: descargar el anterior antes de cargar el nuevo
+- Cambiar a un modelo no cargado daba HTTP 400: la carga JIT intentaba montar el segundo modelo con el primero aún en VRAM.
+- `fetchModels` ahora prefiere `GET /api/v1/models` (API REST v1), que expone las instancias cargadas; nuevo `unloadModel()` llama a `POST /api/v1/models/unload {instance_id}`.
+- Antes de enviar con un modelo sin cargar, `useChat` descarga todas las instancias en memoria («Liberando memoria del servidor...») y luego el chat completion dispara la carga JIT del nuevo. Si el unload falla se avisa pero se intenta igual.
+- Verificado contra el servidor real: unload instantáneo, recarga JIT del gemma-4-12b-qat en 56 s, servidor restaurado a su estado original.
+
+### 2026-07-08 — Cambio de modelo desde el frontend (API nativa + carga JIT)
+- Antes solo se listaban los modelos ya cargados (`/v1/models`) y había que cambiar de modelo en la máquina del servidor. Ahora `fetchModels` usa `GET /api/v0/models` (API nativa de LM Studio): todos los modelos descargados con su estado, con fallback al endpoint antiguo.
+- Selector con indicador ● cargado / ○ disponible; aviso de carga JIT bajo el panel cuando el modelo elegido no está cargado; mensaje de espera especial al enviar («Cargando el modelo...»).
+- Preferencia por modelos cargados al autoseleccionar; `connection.refresh()` re-lee estados tras cada respuesta.
+- Verificado contra el servidor real: la API nativa responde con 5 modelos (1 cargado). Requiere «Just-in-Time model loading» activado en LM Studio (Developer) para que la carga remota funcione.
 
 ### 2026-07-06 — HashRouter para Netlify
 - `BrowserRouter` → `HashRouter` en `main.tsx`: las rutas van tras `#` (`/#/dashboard`), con lo que el hosting estático de Netlify siempre sirve `index.html` y no hay 404 al recargar o entrar por URL directa.

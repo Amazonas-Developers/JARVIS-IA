@@ -39,24 +39,43 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cuando llega la lista de modelos, selecciona el primero si el actual no existe.
+  // Cuando llega la lista de modelos, si el actual no existe selecciona
+  // preferentemente uno ya cargado en el servidor.
   useEffect(() => {
     if (connection.models.length === 0) {
       setModel('');
-    } else if (!connection.models.includes(model)) {
-      setModel(connection.models[0]);
+    } else if (!connection.models.some((m) => m.id === model)) {
+      const preferred =
+        connection.models.find((m) => m.state === 'loaded') ??
+        connection.models[0];
+      setModel(preferred.id);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection.models]);
 
   const handleSend = (text: string) => {
-    void chat.sendMessage(text, {
-      baseUrl: normalizeBaseUrl(env.serverUrl),
-      model,
-      temperature: env.temperature,
-      maxTokens: env.maxTokens,
-      webSearch: settings.webSearchEnabled ? { apiKey: env.tavilyKey } : null,
-    });
+    const selected = connection.models.find((m) => m.id === model);
+    const modelIsLoaded = selected ? selected.state === 'loaded' : true;
+    // Si se cambió a un modelo sin cargar, hay que soltar los que ocupan
+    // la VRAM del servidor antes de que la carga JIT monte el nuevo.
+    const unloadInstanceIds = modelIsLoaded
+      ? []
+      : connection.models
+          .filter((m) => m.state === 'loaded')
+          .flatMap((m) => m.instanceIds);
+
+    void chat
+      .sendMessage(text, {
+        baseUrl: normalizeBaseUrl(env.serverUrl),
+        model,
+        temperature: env.temperature,
+        maxTokens: env.maxTokens,
+        webSearch: settings.webSearchEnabled ? { apiKey: env.tavilyKey } : null,
+        modelIsLoaded,
+        unloadInstanceIds,
+      })
+      // Tras responder, re-lee los estados: el intercambio los cambió.
+      .then(() => connection.refresh(env.serverUrl));
   };
 
   return (
