@@ -11,6 +11,8 @@ interface ImportMetaEnv {
   readonly VITE_TAVILY_API_KEY?: string;
   /** URL del backend con sesiones express-session (instancia axios de libs/http.ts). */
   readonly VITE_API_URL?: string;
+  /** Prefijo de la API del backend (api_jarvis365), p. ej. /api_jarvis/v1. */
+  readonly VITE_API_PREFIX?: string;
 }
 
 interface ImportMeta {

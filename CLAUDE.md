@@ -14,7 +14,7 @@ Migrado el **2026-07-06** desde un único archivo standalone (`../lm-studio-chat
 | Vite | 8.1 | Plugin `@vitejs/plugin-react` |
 | Tailwind CSS | 4.3 | Vía `@tailwindcss/vite`; sin `tailwind.config.js` (config CSS-first con `@theme`) |
 | React Router | 8.1 | Modo declarativo con `HashRouter` (rutas `/#/...` para hosting estático en Netlify), importar desde `react-router` |
-| Redux Toolkit | 2.12 | Configurado pero aún sin uso real (ver abajo) |
+| Redux Toolkit | 2.12 | Estado global de autenticación (`authSlice`); `appSlice` sigue de ejemplo |
 | TypeScript | 6.0 | Estricto; alias `@/` → `src/` (definido en `tsconfig.json` y `vite.config.ts`) |
 | highlight.js | 11.x | Resaltado de código; build `lib/common` (~40 lenguajes) + tema `github-dark` |
 | react-markdown + remark-gfm | 10.x / 4.x | Texto enriquecido en respuestas del asistente (tablas, listas, negritas...) |
@@ -41,7 +41,8 @@ src/
 ├── styles/index.css         # Tailwind + tema (@theme) + globales (scrollbar, body)
 ├── routes/
 │   ├── AppRoutes.tsx        # Definición central de rutas
-│   └── pages/               # / → WelcomePage · /login → LoginPage · /dashboard → DashboardPage (el chat) · * → NotFoundPage
+│   ├── ProtectedRoute.tsx   # Guard/layout: exige sesión (Outlet), si no redirige a /login
+│   └── pages/               # Públicas: / y /login · Protegidas (layout ProtectedRoute): /dashboard y * (404)
 ├── components/
 │   ├── brand/               # Logo Amazonas 365 (BrandLogo PNG, BrandMark SVG, BrandWordmark)
 │   ├── ui/                  # Primitivas reutilizables (Button con velo, Field, ThemeToggle)
@@ -59,6 +60,7 @@ src/
 │   ├── conversations.ts     # Títulos, ids, export/import de conversaciones
 │   ├── env.ts               # Acceso tipado a variables de entorno (único punto de lectura)
 │   ├── http.ts              # Instancia axios con withCredentials (sesiones express-session)
+│   ├── auth.ts              # Cliente de auth del backend (login/isAuth/logout)
 │   ├── storage.ts           # Todo el acceso a localStorage (claves centralizadas)
 │   └── utils.ts             # getErrorMessage, ids de mensajes UI
 ├── store/                   # Redux Toolkit (preparado para uso futuro)
@@ -80,13 +82,15 @@ La URL del servidor, la temperatura, el máx. de tokens y la API key de Tavily *
 | `VITE_TEMPERATURE` | Temperatura del modelo | `0.7` |
 | `VITE_MAX_TOKENS` | Máx. tokens por respuesta | `1024` |
 | `VITE_TAVILY_API_KEY` | Key de búsqueda web | vacío (la UI avisa si se activa la búsqueda sin key) |
-| `VITE_API_URL` | Backend con sesiones (axios `http`) | vacío (peticiones relativas al origen / proxy) |
+| `VITE_API_URL` | Backend api_jarvis365 (axios `http`) | vacío (peticiones relativas al origen / proxy) |
+| `VITE_API_PREFIX` | Prefijo de la API del backend | `/api_jarvis/v1` (prod; en dev del backend es `/api_jarvis_dev/v1`) |
 
 Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); los tipos de las variables están en `src/vite-env.d.ts`; se inyectan **en build**, así que cambiar el `.env` exige reiniciar `npm run dev`; al ser una SPA los valores acaban en el bundle JS (no poner secretos sensibles).
 
 ## Arquitectura y decisiones
 
-- **Estado en hooks, no en Redux (por ahora).** Toda la lógica vive en `useChat` / `useConnection` / `useSettings` y `DashboardPage` los orquesta pasando props. Redux está instalado, configurado y conectado (Provider en `main.tsx`) solo para uso futuro; para migrar estado global: crear slice en `src/store/slices/`, registrarlo en `src/store/index.ts` y consumir con los hooks tipados de `src/store/hooks.ts`.
+- **Autenticación con estado global en Redux.** El backend real es `api_jarvis365` (Express + express-session, sesión por cookie). El flujo: `LoginPage` despacha el thunk `login({email,password})` → `POST {VITE_API_PREFIX}/auth/login` vía la instancia axios `http` (withCredentials); al arrancar, `App.tsx` despacha `checkAuth()` → `GET .../auth/isAuth` para restaurar la sesión tras recargar; `logout()` → `GET .../auth/logout`. El estado (`user`, `status`, `loginPending`, `error`) vive en `store/slices/authSlice.ts` y se lee con el hook `useAuth`. `ProtectedRoute` es un layout (`<Route element={<ProtectedRoute/>}>` + `Outlet`): TODAS las rutas salvo `/` y `/login` cuelgan de él — las páginas nuevas se añaden dentro del grupo protegido en `AppRoutes.tsx` y quedan protegidas automáticamente. Mientras `status` es idle/checking muestra un cargador (no expulsa durante la verificación) y si no hay sesión redirige a `/login`. El botón de cerrar sesión y el nombre del usuario están en el Header. Endpoints/estructura verificados contra el backend real. Nota: el backend espera **email** (no user); su login devuelve el usuario y `isAuth` devuelve `dataUser`.
+- **El resto del estado, en hooks (no en Redux).** `useChat` / `useConnection` / `useSettings` y `DashboardPage` los orquesta pasando props. Para migrar más estado global: crear slice en `src/store/slices/`, registrarlo en `src/store/index.ts` y consumir con los hooks tipados de `src/store/hooks.ts` (`appSlice` sigue como plantilla de ejemplo).
 - **Mensajes persistidos vs. mensajes de UI.** `ChatMessage` (user/assistant) es lo que se guarda y se envía al modelo. `UiMessage` añade tipos efímeros (`system`, `error`, `web`) que solo se muestran en pantalla y nunca se persisten. Al usar búsqueda web, el contexto se antepone como mensaje `system` únicamente en la petición, sin ensuciar el historial.
 - **Archivos adjuntos (todo tipo).** El clip del `ChatInput` acepta cualquier archivo; `libs/attachments.ts` los procesa EN el navegador: imágenes → data URL reescalada a ≤1024px JPEG que se envía al modelo como content part `image_url` (los Gemma del servidor tienen visión; ver `toApiMessages` en lmStudio.ts); PDF (pdfjs-dist) / Word .docx (mammoth) / Excel-ODS (SheetJS→CSV) / texto-código / ZIP (jszip lista el contenido) → texto truncado a 60k chars que se añade a `ChatMessage.content`; video/audio/RAR/otros binarios → solo metadatos. `content` es lo que ve el modelo y `displayContent` lo que ve el usuario (+ chips con `attachments` y miniaturas con `images`). Las librerías pesadas van en chunks aparte (`import()` dinámico). Ojo: las imágenes se persisten como data URL en localStorage — conversaciones con muchas imágenes pueden acercarse a la cuota (~5-10 MB).
 - **Tailwind 4 CSS-first con tema Amazonas 365 (jarvis365.net).** No hay `tailwind.config.js`; toda la arquitectura vive en `src/styles/index.css`: (1) tokens crudos `--a365-*` por modo (`:root` = claro con verdes/blancos/grises, `.dark` = oscuro con toques verdes), (2) `@theme inline` los expone como utilidades (`bg-panel`, `text-muted`, `border-line`, `bg-accent-strong`...) que se re-colorean solas al cambiar de tema, (3) tokens fijos (`brand` #327B32, `lime` #B8CE30 — extraídos del logo oficial — y `code/code-header/code-line` para bloques de código siempre oscuros) y la utilidad `.glass` (glassmorphism: fondo translúcido + blur + color de borde incluido; usar `glass border`, sin `border-line`). El fondo del `body` lleva resplandores radiales de marca que dan textura al glass.
@@ -109,6 +113,13 @@ Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); l
 ## Historial
 
 > Añadir una entrada por cada sesión de trabajo relevante, la más reciente arriba.
+
+### 2026-07-08 — Autenticación real (api_jarvis365) + Redux + rutas protegidas
+- Conectado el login al backend real `api_jarvis365`: `POST /api_jarvis/v1/auth/login` con `{ email, password }` (antes se asumía `user`); `GET .../auth/isAuth` para restaurar sesión y `GET .../auth/logout`.
+- Estado global de auth en Redux (`authSlice` con thunks `login`/`logout`/`checkAuth`); hook `useAuth`; nuevo `libs/auth.ts` y tipos `types/auth.ts`.
+- `/dashboard` protegida con `ProtectedRoute` (cargador durante la verificación, redirect a `/login` si no hay sesión); `App.tsx` verifica la sesión al arrancar; Header con nombre de usuario y botón de logout.
+- Nueva variable `VITE_API_PREFIX` (`/api_jarvis/v1`). Endpoints y respuestas verificados contra el backend real (login 404/JSON con `message`, isAuth 401 sin sesión).
+- Pendiente al desplegar: añadir el dominio Netlify del chat IA al CORS del backend (`src/config/origins.js`).
 
 ### 2026-07-08 — Adjuntar archivos de todo tipo en el chat
 - Botón de clip en `ChatInput` (acepta múltiples archivos de cualquier tipo) con chips de estado (procesando/listo/error) y quitables.
@@ -185,5 +196,3 @@ Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); l
 - [ ] Añadir ESLint + Prettier.
 - [ ] Sidebar plegable en pantallas pequeñas (el slice `app` ya tiene `sidebarVisible`).
 - [ ] Recrear el icono engranaje+circuitos (imagen de referencia del usuario) como SVG propio; hoy ese motivo se representa con lucide (`Cog`/`Cpu`) en la bienvenida.
-- [ ] Proteger `/dashboard` con la sesión real (guard/redirect a `/login` usando `GET /auth/me`) y guardar el usuario en un `authSlice` de Redux.
-- [ ] Botón de cerrar sesión en el Header del dashboard (`POST /auth/logout`).

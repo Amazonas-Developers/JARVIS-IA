@@ -1,5 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import appReducer from './slices/appSlice';
+import authReducer from './slices/authSlice';
 
 /*
   Store de Redux Toolkit, configurado y conectado en main.tsx.
@@ -12,6 +13,7 @@ import appReducer from './slices/appSlice';
 export const store = configureStore({
   reducer: {
     app: appReducer,
+    auth: authReducer,
   },
 });
 

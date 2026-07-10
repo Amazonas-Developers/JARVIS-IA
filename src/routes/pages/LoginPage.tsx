@@ -1,43 +1,49 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router';
-import { ArrowLeft, KeyRound, LogIn, TriangleAlert, User } from 'lucide-react';
+import { ArrowLeft, KeyRound, LogIn, Mail, TriangleAlert } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Field, { inputClasses } from '@/components/ui/Field';
 import { BrandMark } from '@/components/brand/Logo';
-import { http } from '@/libs/http';
-import { getErrorMessage } from '@/libs/utils';
+import { useAppDispatch } from '@/store/hooks';
+import { useAuth } from '@/hooks/useAuth';
+import { clearAuthError, login } from '@/store/slices/authSlice';
 
 /*
-  Ruta /login: inicia sesión contra el backend con express-session usando la
-  instancia axios de libs/http.ts (withCredentials). Si el login responde OK,
-  el navegador ya guardó la cookie de sesión y se navega al dashboard.
-  El endpoint esperado es POST {VITE_API_URL}/auth/login { user, password }.
+  Ruta /login: inicia sesión contra el backend api_jarvis365 (express-session)
+  a través del authSlice de Redux (POST /auth/login con { email, password }).
+  Al autenticarse, la cookie de sesión queda guardada y se navega al dashboard.
 */
 export default function LoginPage() {
   const navigate = useNavigate();
-  const [user, setUser] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const dispatch = useAppDispatch();
+  const { isAuthenticated, loginPending, error } = useAuth();
 
-  const handleSubmit = async (e: FormEvent) => {
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [localError, setLocalError] = useState<string | null>(null);
+
+  // Si ya hay sesión (o acaba de iniciarse), fuera de la pantalla de login.
+  useEffect(() => {
+    if (isAuthenticated) navigate('/dashboard', { replace: true });
+  }, [isAuthenticated, navigate]);
+
+  // Limpia cualquier error de un intento anterior al montar.
+  useEffect(() => {
+    dispatch(clearAuthError());
+  }, [dispatch]);
+
+  const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    if (!user.trim() || !password) {
-      setError('Completa el usuario y la contraseña.');
+    if (!email.trim() || !password) {
+      setLocalError('Completa el correo y la contraseña.');
       return;
     }
-    setIsSubmitting(true);
-    setError(null);
-    try {
-      await http.post('/auth/login', { user: user.trim(), password });
-      navigate('/dashboard');
-    } catch (err) {
-      setError(getErrorMessage(err));
-    } finally {
-      setIsSubmitting(false);
-    }
+    setLocalError(null);
+    void dispatch(login({ email: email.trim(), password }));
   };
+
+  const shownError = localError ?? error;
 
   return (
     <div className="flex min-h-full items-center justify-center px-6 py-12">
@@ -51,18 +57,18 @@ export default function LoginPage() {
             </p>
           </div>
 
-          <form onSubmit={(e) => void handleSubmit(e)} className="flex flex-col gap-4">
-            <Field label="Usuario o correo" htmlFor="loginUser">
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+            <Field label="Correo electrónico" htmlFor="loginEmail">
               <div className="relative">
-                <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                <Mail className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                 <input
-                  id="loginUser"
-                  type="text"
+                  id="loginEmail"
+                  type="email"
                   autoComplete="username"
                   className={`${inputClasses} w-full pl-9`}
                   placeholder="tu@correo.com"
-                  value={user}
-                  onChange={(e) => setUser(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                 />
               </div>
             </Field>
@@ -82,16 +88,16 @@ export default function LoginPage() {
               </div>
             </Field>
 
-            {error && (
+            {shownError && (
               <p className="m-0 flex items-center gap-1.5 rounded-lg border border-error/30 bg-error/10 px-3 py-2 text-xs text-error">
                 <TriangleAlert className="h-3.5 w-3.5 shrink-0" />
-                {error}
+                {shownError}
               </p>
             )}
 
-            <Button type="submit" disabled={isSubmitting} className="w-full py-2.5">
+            <Button type="submit" disabled={loginPending} className="w-full py-2.5">
               <LogIn className="h-4 w-4" />
-              {isSubmitting ? 'Entrando…' : 'Entrar'}
+              {loginPending ? 'Entrando…' : 'Entrar'}
             </Button>
           </form>
         </div>

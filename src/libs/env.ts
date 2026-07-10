@@ -27,4 +27,7 @@ export const env = {
   tavilyKey: import.meta.env.VITE_TAVILY_API_KEY?.trim() ?? '',
   /** VITE_API_URL — backend con autenticación por sesión (vacío = mismo origen). */
   apiUrl: import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '') ?? '',
+  /** VITE_API_PREFIX — prefijo de la API del backend (api_jarvis365). */
+  apiPrefix:
+    import.meta.env.VITE_API_PREFIX?.trim().replace(/\/+$/, '') || '/api_jarvis/v1',
 } as const;
