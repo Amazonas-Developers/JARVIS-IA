@@ -16,3 +16,9 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** Worker de pdfjs-dist importado como URL (Vite `?url`). */
+declare module 'pdfjs-dist/build/pdf.worker.min.mjs?url' {
+  const src: string;
+  export default src;
+}

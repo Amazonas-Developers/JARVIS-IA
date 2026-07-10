@@ -1,4 +1,15 @@
-import type { ChatMessage } from './chat';
+import type { ChatRole } from './chat';
+
+/** Parte de contenido multimodal (formato OpenAI para modelos con visión). */
+export type ContentPart =
+  | { type: 'text'; text: string }
+  | { type: 'image_url'; image_url: { url: string } };
+
+/** Mensaje en el formato que espera la API (texto plano o multimodal). */
+export interface ApiChatMessage {
+  role: ChatRole;
+  content: string | ContentPart[];
+}
 
 /** Estado de la conexión con el servidor de LM Studio. */
 export type ConnectionState = 'idle' | 'checking' | 'ok' | 'error';
@@ -49,7 +60,7 @@ export interface LmStudioNativeModelsResponse {
 /** Cuerpo de POST /v1/chat/completions (subconjunto que usa la app). */
 export interface ChatCompletionRequest {
   model: string;
-  messages: ChatMessage[];
+  messages: ApiChatMessage[];
   temperature: number;
   max_tokens: number;
   stream: boolean;

@@ -1,5 +1,7 @@
+import { useMemo } from 'react';
 import type { UiMessage, UiMessageKind } from '@/types/chat';
 import MarkdownContent from './MarkdownContent';
+import AttachmentChip from './AttachmentChip';
 
 const base =
   'max-w-[75%] break-words rounded-xl px-3.5 py-2.5 text-sm leading-normal';
@@ -17,8 +19,35 @@ const kindClasses: Record<UiMessageKind, string> = {
 };
 
 export default function MessageBubble({ message }: { message: UiMessage }) {
+  // Chips solo para adjuntos sin miniatura (las imágenes ya se ven abajo).
+  const fileChips = useMemo(
+    () => (message.attachments ?? []).filter((a) => a.kind !== 'image'),
+    [message.attachments],
+  );
+
   return (
     <div className={`${base} ${kindClasses[message.kind]}`}>
+      {message.images && message.images.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          {message.images.map((src, i) => (
+            <img
+              key={i}
+              src={src}
+              alt={`Imagen adjunta ${i + 1}`}
+              className="max-h-40 max-w-full rounded-lg border border-line object-contain"
+            />
+          ))}
+        </div>
+      )}
+
+      {fileChips.length > 0 && (
+        <div className="mb-2 flex flex-wrap gap-1.5">
+          {fileChips.map((meta, i) => (
+            <AttachmentChip key={`${meta.name}_${i}`} meta={meta} />
+          ))}
+        </div>
+      )}
+
       {message.kind === 'assistant' ? (
         <MarkdownContent content={message.content} />
       ) : (

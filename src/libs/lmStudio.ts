@@ -1,4 +1,5 @@
 import type {
+  ApiChatMessage,
   ChatCompletionRequest,
   ChatCompletionResponse,
   LmStudioModelsResponse,
@@ -6,6 +7,29 @@ import type {
   LmStudioV1ModelsResponse,
   ModelInfo,
 } from '@/types/api';
+import type { ChatMessage } from '@/types/chat';
+
+/**
+ * Convierte los mensajes internos al formato de la API: los que llevan
+ * imágenes se envían como content parts multimodales (modelos con visión).
+ */
+export function toApiMessages(messages: ChatMessage[]): ApiChatMessage[] {
+  return messages.map<ApiChatMessage>((m) => {
+    if (m.images && m.images.length > 0) {
+      return {
+        role: m.role,
+        content: [
+          { type: 'text', text: m.content },
+          ...m.images.map((url) => ({
+            type: 'image_url' as const,
+            image_url: { url },
+          })),
+        ],
+      };
+    }
+    return { role: m.role, content: m.content };
+  });
+}
 
 /** Normaliza la URL base: quita espacios y barras finales. */
 export function normalizeBaseUrl(rawUrl: string): string {

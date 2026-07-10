@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import type { ProcessedAttachment } from '@/types/chat';
 import Sidebar from '@/components/layout/Sidebar';
 import Header from '@/components/layout/Header';
 import ConfigPanel from '@/components/config/ConfigPanel';
@@ -53,7 +54,7 @@ export default function DashboardPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [connection.models]);
 
-  const handleSend = (text: string) => {
+  const handleSend = (text: string, attachments: ProcessedAttachment[]) => {
     const selected = connection.models.find((m) => m.id === model);
     const modelIsLoaded = selected ? selected.state === 'loaded' : true;
     // Si se cambió a un modelo sin cargar, hay que soltar los que ocupan
@@ -73,6 +74,7 @@ export default function DashboardPage() {
         webSearch: settings.webSearchEnabled ? { apiKey: env.tavilyKey } : null,
         modelIsLoaded,
         unloadInstanceIds,
+        attachments,
       })
       // Tras responder, re-lee los estados: el intercambio los cambió.
       .then(() => connection.refresh(env.serverUrl));

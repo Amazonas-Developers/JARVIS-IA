@@ -16,7 +16,12 @@ export function createConversationId(): string {
 export function makeTitleFromMessages(messages: ChatMessage[]): string {
   const firstUser = messages.find((m) => m.role === 'user');
   if (!firstUser) return DEFAULT_CONVERSATION_TITLE;
-  const t = firstUser.content.trim().replace(/\s+/g, ' ');
+  // displayContent es lo que escribió el usuario (sin el texto extraído de adjuntos)
+  const source = firstUser.displayContent?.trim()
+    ? firstUser.displayContent
+    : firstUser.content;
+  const t = source.trim().replace(/\s+/g, ' ');
+  if (!t) return firstUser.attachments?.[0]?.name ?? DEFAULT_CONVERSATION_TITLE;
   return t.length > 40 ? `${t.slice(0, 40)}…` : t;
 }
 

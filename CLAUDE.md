@@ -20,6 +20,7 @@ Migrado el **2026-07-06** desde un único archivo standalone (`../lm-studio-chat
 | react-markdown + remark-gfm | 10.x / 4.x | Texto enriquecido en respuestas del asistente (tablas, listas, negritas...) |
 | axios | 1.x | Instancia `http` en `libs/http.ts` para backend con sesiones (aún sin uso real) |
 | lucide-react | última | Iconos de toda la UI (botones, paneles, páginas) |
+| pdfjs-dist + mammoth + SheetJS (xlsx, tarball CDN oficial) + jszip | últimas | Extracción de adjuntos en el navegador; carga diferida con `import()` |
 
 ## Comandos
 
@@ -54,6 +55,7 @@ src/
 ├── libs/
 │   ├── lmStudio.ts          # Cliente API LM Studio (/v1/models, /v1/chat/completions)
 │   ├── tavily.ts            # Búsqueda web + formateo de resultados como contexto
+│   ├── attachments.ts       # Adjuntos: detección de tipo, extracción de texto, escalado de imágenes
 │   ├── conversations.ts     # Títulos, ids, export/import de conversaciones
 │   ├── env.ts               # Acceso tipado a variables de entorno (único punto de lectura)
 │   ├── http.ts              # Instancia axios con withCredentials (sesiones express-session)
@@ -86,6 +88,7 @@ Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); l
 
 - **Estado en hooks, no en Redux (por ahora).** Toda la lógica vive en `useChat` / `useConnection` / `useSettings` y `DashboardPage` los orquesta pasando props. Redux está instalado, configurado y conectado (Provider en `main.tsx`) solo para uso futuro; para migrar estado global: crear slice en `src/store/slices/`, registrarlo en `src/store/index.ts` y consumir con los hooks tipados de `src/store/hooks.ts`.
 - **Mensajes persistidos vs. mensajes de UI.** `ChatMessage` (user/assistant) es lo que se guarda y se envía al modelo. `UiMessage` añade tipos efímeros (`system`, `error`, `web`) que solo se muestran en pantalla y nunca se persisten. Al usar búsqueda web, el contexto se antepone como mensaje `system` únicamente en la petición, sin ensuciar el historial.
+- **Archivos adjuntos (todo tipo).** El clip del `ChatInput` acepta cualquier archivo; `libs/attachments.ts` los procesa EN el navegador: imágenes → data URL reescalada a ≤1024px JPEG que se envía al modelo como content part `image_url` (los Gemma del servidor tienen visión; ver `toApiMessages` en lmStudio.ts); PDF (pdfjs-dist) / Word .docx (mammoth) / Excel-ODS (SheetJS→CSV) / texto-código / ZIP (jszip lista el contenido) → texto truncado a 60k chars que se añade a `ChatMessage.content`; video/audio/RAR/otros binarios → solo metadatos. `content` es lo que ve el modelo y `displayContent` lo que ve el usuario (+ chips con `attachments` y miniaturas con `images`). Las librerías pesadas van en chunks aparte (`import()` dinámico). Ojo: las imágenes se persisten como data URL en localStorage — conversaciones con muchas imágenes pueden acercarse a la cuota (~5-10 MB).
 - **Tailwind 4 CSS-first con tema Amazonas 365 (jarvis365.net).** No hay `tailwind.config.js`; toda la arquitectura vive en `src/styles/index.css`: (1) tokens crudos `--a365-*` por modo (`:root` = claro con verdes/blancos/grises, `.dark` = oscuro con toques verdes), (2) `@theme inline` los expone como utilidades (`bg-panel`, `text-muted`, `border-line`, `bg-accent-strong`...) que se re-colorean solas al cambiar de tema, (3) tokens fijos (`brand` #327B32, `lime` #B8CE30 — extraídos del logo oficial — y `code/code-header/code-line` para bloques de código siempre oscuros) y la utilidad `.glass` (glassmorphism: fondo translúcido + blur + color de borde incluido; usar `glass border`, sin `border-line`). El fondo del `body` lleva resplandores radiales de marca que dan textura al glass.
 - **Modo claro/oscuro**: clase `dark` en `<html>` (`@custom-variant dark` en index.css). `useTheme` la conmuta y persiste en localStorage (`a365_theme`); un script inline en `index.html` aplica el tema guardado antes del primer render (anti-parpadeo) — si se cambia la clave hay que tocar ambos sitios. El botón `ThemeToggle` está en el Header del dashboard. Sin preferencia guardada se respeta `prefers-color-scheme`.
 - **Identidad visual**: `components/brand/Logo.tsx` — `BrandLogo` usa el PNG oficial descargado de jarvis365.net (`src/assets/amazonas365-logo.png`, hero de la bienvenida), `BrandMark` es el isotipo (anillo verde + hoja lima) recreado en SVG (login) y `BrandWordmark` combina isotipo + texto (header del dashboard). Iconos: lucide-react en botones y elementos (los `Button` aceptan un icono como child y tienen "velo" hover vía `::after`).
@@ -106,6 +109,12 @@ Reglas: leer siempre vía `src/libs/env.ts` (nunca `import.meta.env` directo); l
 ## Historial
 
 > Añadir una entrada por cada sesión de trabajo relevante, la más reciente arriba.
+
+### 2026-07-08 — Adjuntar archivos de todo tipo en el chat
+- Botón de clip en `ChatInput` (acepta múltiples archivos de cualquier tipo) con chips de estado (procesando/listo/error) y quitables.
+- `libs/attachments.ts`: imágenes → visión (content parts `image_url`, reescaladas a 1024px JPEG); PDF/Word/Excel/CSV/texto/código → texto extraído en el navegador e inyectado al mensaje; ZIP → listado de contenido; video/audio/RAR → metadatos.
+- `ChatMessage` ganó `displayContent`/`attachments`/`images`; `toApiMessages` en lmStudio.ts arma el formato multimodal OpenAI; burbujas del usuario muestran miniaturas y chips.
+- Extractores verificados con Node (Excel→CSV, ZIP→listado, DOCX→texto); pdfjs/mammoth/xlsx/jszip en chunks diferidos.
 
 ### 2026-07-08 — Intercambio de modelos: descargar el anterior antes de cargar el nuevo
 - Cambiar a un modelo no cargado daba HTTP 400: la carga JIT intentaba montar el segundo modelo con el primero aún en VRAM.

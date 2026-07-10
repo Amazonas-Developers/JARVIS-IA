@@ -3,6 +3,7 @@ import type {
   ChatMessage,
   Conversation,
   ConversationMap,
+  ProcessedAttachment,
   UiMessage,
   UiMessageKind,
 } from '@/types/chat';
@@ -19,7 +20,8 @@ import {
   makeTitleFromMessages,
   mergeImportedConversations,
 } from '@/libs/conversations';
-import { createChatCompletion, unloadModel } from '@/libs/lmStudio';
+import { createChatCompletion, toApiMessages, unloadModel } from '@/libs/lmStudio';
+import { buildModelContent } from '@/libs/attachments';
 import { formatSearchResults, searchWeb } from '@/libs/tavily';
 import { getErrorMessage, nextUiMessageId } from '@/libs/utils';
 
@@ -37,6 +39,8 @@ export interface SendMessageOptions {
    * cambia a un modelo no cargado (intercambio en vez de acumulación).
    */
   unloadInstanceIds?: string[];
+  /** Archivos adjuntos ya procesados en el navegador (libs/attachments.ts). */
+  attachments?: ProcessedAttachment[];
 }
 
 export interface Chat {
@@ -75,9 +79,13 @@ export function useChat(): Chat {
   const isSendingRef = useRef(false);
   const initializedRef = useRef(false);
 
-  const pushUi = (kind: UiMessageKind, content: string): string => {
+  const pushUi = (
+    kind: UiMessageKind,
+    content: string,
+    extra?: Pick<UiMessage, 'attachments' | 'images'>,
+  ): string => {
     const id = nextUiMessageId();
-    setUiMessages((prev) => [...prev, { id, kind, content }]);
+    setUiMessages((prev) => [...prev, { id, kind, content, ...extra }]);
     return id;
   };
 
@@ -141,7 +149,9 @@ export function useChat(): Chat {
         messagesRef.current.map((m) => ({
           id: nextUiMessageId(),
           kind: m.role,
-          content: m.content,
+          content: m.displayContent ?? m.content,
+          attachments: m.attachments,
+          images: m.images,
         })),
       );
     }
@@ -219,7 +229,8 @@ export function useChat(): Chat {
 
   const sendMessage = async (text: string, options: SendMessageOptions) => {
     const trimmed = text.trim();
-    if (!trimmed || isSendingRef.current) return;
+    const attachments = options.attachments ?? [];
+    if ((!trimmed && attachments.length === 0) || isSendingRef.current) return;
 
     if (!options.baseUrl) {
       pushUi('error', 'Configura primero la dirección del servidor.');
@@ -239,11 +250,30 @@ export function useChat(): Chat {
     isSendingRef.current = true;
     setIsSending(true);
 
-    pushUi('user', trimmed);
-    const withUser: ChatMessage[] = [
-      ...messagesRef.current,
-      { role: 'user', content: trimmed },
-    ];
+    // El usuario ve su texto + chips; el modelo recibe además el contenido
+    // extraído de los adjuntos (y las imágenes como content parts).
+    const metas = attachments.map((a) => a.meta);
+    const images = attachments
+      .map((a) => a.imageDataUrl)
+      .filter((url): url is string => Boolean(url));
+    const modelContent = buildModelContent(
+      trimmed || 'Analiza el contenido de los archivos adjuntos.',
+      attachments,
+    );
+
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: modelContent,
+      ...(modelContent !== trimmed ? { displayContent: trimmed } : {}),
+      ...(metas.length > 0 ? { attachments: metas } : {}),
+      ...(images.length > 0 ? { images } : {}),
+    };
+
+    pushUi('user', trimmed, {
+      attachments: metas.length > 0 ? metas : undefined,
+      images: images.length > 0 ? images : undefined,
+    });
+    const withUser: ChatMessage[] = [...messagesRef.current, userMessage];
     messagesRef.current = withUser;
     persistCurrent(convId, withUser);
 
@@ -251,7 +281,7 @@ export function useChat(): Chat {
     // búsqueda, sin ensuciar el historial visible de la conversación).
     let messagesToSend = withUser;
 
-    if (options.webSearch) {
+    if (options.webSearch && trimmed) {
       const searchingId = pushUi(
         'web',
         `🔎 Buscando en internet: "${trimmed}"`,
@@ -308,7 +338,7 @@ export function useChat(): Chat {
     try {
       const reply = await createChatCompletion(options.baseUrl, {
         model: options.model,
-        messages: messagesToSend,
+        messages: toApiMessages(messagesToSend),
         temperature: options.temperature,
         max_tokens: options.maxTokens,
         stream: false,
