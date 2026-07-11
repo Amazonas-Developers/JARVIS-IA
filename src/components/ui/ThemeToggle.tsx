@@ -12,9 +12,13 @@ export default function ThemeToggle() {
       onClick={toggleTheme}
       title={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
       aria-label={isDark ? 'Cambiar a modo claro' : 'Cambiar a modo oscuro'}
-      className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-line bg-panel-2 text-muted transition-colors hover:bg-panel-hover hover:text-foreground"
+      className="group flex h-9 w-9 cursor-pointer items-center justify-center rounded-full border border-line bg-panel-2 text-muted transition-all duration-200 hover:scale-105 hover:bg-panel-hover hover:text-accent"
     >
-      {isDark ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+      {isDark ? (
+        <Sun className="h-4 w-4 transition-transform duration-300 group-hover:rotate-45" />
+      ) : (
+        <Moon className="h-4 w-4 transition-transform duration-300 group-hover:-rotate-12" />
+      )}
     </button>
   );
 }

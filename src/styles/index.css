@@ -104,6 +104,134 @@
   -webkit-backdrop-filter: blur(14px) saturate(1.35);
 }
 
+/* ── Animaciones y micro-interacciones ──
+   Solo transform/opacity (compositable, 60fps). Duraciones 200-300ms según
+   la guía UI/UX. Todo se desactiva con prefers-reduced-motion (más abajo). */
+
+@keyframes a365-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes a365-scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes a365-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Deriva lenta de los objetos decorativos del fondo (aurora) */
+@keyframes a365-float {
+  0%,
+  100% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(3%, -4%) scale(1.06);
+  }
+}
+
+/* Barrido de brillo para estados de carga (skeletons, etc.) */
+@keyframes a365-shimmer {
+  from {
+    background-position: -180% 0;
+  }
+  to {
+    background-position: 180% 0;
+  }
+}
+
+.animate-fade-up {
+  animation: a365-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-scale-in {
+  animation: a365-scale-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.animate-fade-in {
+  animation: a365-fade-in 0.5s ease-out both;
+}
+
+/* Retardos para entradas escalonadas (listas de tarjetas, etc.) */
+.delay-1 {
+  animation-delay: 0.06s;
+}
+.delay-2 {
+  animation-delay: 0.12s;
+}
+.delay-3 {
+  animation-delay: 0.18s;
+}
+.delay-4 {
+  animation-delay: 0.24s;
+}
+.delay-5 {
+  animation-delay: 0.3s;
+}
+
+/* Objeto decorativo aurora: mancha de color desenfocada que deriva despacio */
+.aurora-blob {
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(64px);
+  opacity: 0.55;
+  pointer-events: none;
+  animation: a365-float 16s ease-in-out infinite;
+  will-change: transform;
+}
+
+/* Elevación al pasar el cursor: profundidad + acento del borde */
+.card-hover {
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    border-color 0.25s ease;
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 18px 40px -18px rgba(50, 123, 50, 0.45);
+  border-color: color-mix(in srgb, var(--a365-accent) 45%, var(--a365-line));
+}
+
+/* Foco visible accesible y consistente en toda la app */
+:where(a, button, input, select, textarea):focus-visible {
+  outline: 2px solid var(--a365-accent);
+  outline-offset: 2px;
+}
+
+/* Accesibilidad: respeta a quien prefiere menos movimiento */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+  .aurora-blob {
+    animation: none !important;
+  }
+}
+
 /* ── Globales ── */
 ::-webkit-scrollbar {
   width: 8px;

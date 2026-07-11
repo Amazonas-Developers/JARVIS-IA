@@ -5,6 +5,7 @@ import { ArrowLeft, KeyRound, LogIn, Mail, TriangleAlert } from 'lucide-react';
 import Button from '@/components/ui/Button';
 import Field, { inputClasses } from '@/components/ui/Field';
 import { BrandMark } from '@/components/brand/Logo';
+import AuroraBackground from '@/components/brand/AuroraBackground';
 import { useAppDispatch } from '@/store/hooks';
 import { useAuth } from '@/hooks/useAuth';
 import { clearAuthError, login } from '@/store/slices/authSlice';
@@ -46,11 +47,12 @@ export default function LoginPage() {
   const shownError = localError ?? error;
 
   return (
-    <div className="flex min-h-full items-center justify-center px-6 py-12">
-      <div className="w-full max-w-sm">
+    <div className="relative flex min-h-full items-center justify-center overflow-hidden px-6 py-12">
+      <AuroraBackground />
+      <div className="animate-scale-in w-full max-w-sm">
         <div className="glass rounded-2xl border p-8 shadow-xl">
           <div className="mb-6 flex flex-col items-center gap-2 text-center">
-            <BrandMark className="h-14 w-14" />
+            <BrandMark className="h-14 w-14 drop-shadow-[0_4px_14px_rgba(50,123,50,0.35)]" />
             <h1 className="m-0 text-xl font-bold">Iniciar sesión</h1>
             <p className="m-0 text-xs text-muted">
               Accede al dashboard de Amazonas 365

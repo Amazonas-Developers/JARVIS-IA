@@ -102,27 +102,60 @@ export async function processFile(file: File): Promise<ProcessedAttachment> {
 /**
  * Construye el texto que se envía al modelo: el mensaje del usuario más el
  * contenido extraído de cada adjunto (o sus metadatos si no era legible).
+ *
+ * El contenido de los archivos legibles se incrusta AQUÍ, en el propio
+ * mensaje, con una instrucción explícita: los modelos pequeños tienden a
+ * responder "súbeme el archivo" si no se les deja claro que el contenido ya
+ * está incluido y no hay que adjuntar nada más.
  */
 export function buildModelContent(
   userText: string,
   attachments: ProcessedAttachment[],
 ): string {
-  let content = userText;
-  for (const a of attachments) {
-    const { name, kind, size } = a.meta;
-    if (a.text !== undefined) {
-      content +=
-        `\n\n--- Contenido del archivo adjunto «${name}» (${kindLabel(kind)}) ---\n` +
-        `${a.text}\n--- Fin de «${name}» ---`;
-    } else if (kind !== 'image') {
-      content +=
-        `\n\n[Archivo adjunto: «${name}» (${kindLabel(kind)}, ${formatBytes(size)}) — ` +
-        `contenido binario no analizable en el navegador` +
-        (a.error ? `; error al leerlo: ${a.error}` : '') +
-        `]`;
-    }
+  if (attachments.length === 0) return userText;
+
+  const images = attachments.filter((a) => a.meta.kind === 'image');
+  const withText = attachments.filter((a) => a.text !== undefined);
+  const binaries = attachments.filter(
+    (a) => a.meta.kind !== 'image' && a.text === undefined,
+  );
+
+  const parts: string[] = [];
+
+  // Instrucción de encuadre para que el modelo NO pida que se suba el archivo.
+  const notes: string[] = [];
+  if (withText.length > 0)
+    notes.push(
+      'el texto completo de los documentos adjuntos está incluido más abajo, entre marcadores',
+    );
+  if (images.length > 0)
+    notes.push('las imágenes adjuntas se te envían junto a este mensaje para que las veas');
+  if (notes.length > 0) {
+    parts.push(
+      `[El usuario adjuntó ${attachments.length} archivo(s): ${notes.join(' y ')}. ` +
+        `Analiza ese contenido directamente y responde; NO pidas que se suba de nuevo.]`,
+    );
   }
-  return content;
+
+  if (userText.trim()) parts.push(userText.trim());
+
+  for (const a of withText) {
+    parts.push(
+      `----- INICIO DEL ARCHIVO «${a.meta.name}» (${kindLabel(a.meta.kind)}) -----\n` +
+        `${a.text}\n----- FIN DEL ARCHIVO «${a.meta.name}» -----`,
+    );
+  }
+
+  for (const a of binaries) {
+    parts.push(
+      `[Archivo adjunto no analizable en el navegador: «${a.meta.name}» ` +
+        `(${kindLabel(a.meta.kind)}, ${formatBytes(a.meta.size)})` +
+        (a.error ? ` — error al leerlo: ${a.error}` : '') +
+        `]`,
+    );
+  }
+
+  return parts.join('\n\n');
 }
 
 /* ── Extractores por tipo (librerías con carga diferida) ── */

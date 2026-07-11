@@ -4,7 +4,7 @@ import MarkdownContent from './MarkdownContent';
 import AttachmentChip from './AttachmentChip';
 
 const base =
-  'max-w-[75%] break-words rounded-xl px-3.5 py-2.5 text-sm leading-normal';
+  'animate-fade-up max-w-[75%] break-words rounded-xl px-3.5 py-2.5 text-sm leading-normal';
 
 const kindClasses: Record<UiMessageKind, string> = {
   user: 'self-end whitespace-pre-wrap rounded-br-[2px] bg-bubble-user shadow-sm',

@@ -68,9 +68,9 @@ export default function Sidebar({
           conversations.map((conv) => (
             <div
               key={conv.id}
-              className={`group flex cursor-pointer items-center justify-between gap-1.5 rounded-lg px-2.5 py-2 text-[13px] transition-colors ${
+              className={`group flex cursor-pointer items-center justify-between gap-1.5 rounded-lg px-2.5 py-2 text-[13px] transition-all duration-200 hover:translate-x-0.5 ${
                 conv.id === currentId
-                  ? 'bg-bubble-user font-medium'
+                  ? 'bg-bubble-user font-medium shadow-sm'
                   : 'hover:bg-panel-hover'
               }`}
               onClick={() => onSelectConversation(conv.id)}

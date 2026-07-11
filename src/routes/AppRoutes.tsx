@@ -4,21 +4,27 @@ import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
 import NotFoundPage from './pages/NotFoundPage';
 import ProtectedRoute from './ProtectedRoute';
+import PublicOnlyRoute from './PublicOnlyRoute';
 
 /*
-  Definición central de rutas. Solo la bienvenida (/) y el login son públicas;
-  TODO lo demás (incluido el 404) cuelga del layout ProtectedRoute y exige
-  sesión. Para añadir una página: crear el componente en src/routes/pages/ y
-  añadir su <Route> DENTRO del grupo protegido (salvo que deba ser pública).
+  Definición central de rutas:
+  - Solo-invitados (PublicOnlyRoute): / y /login → si ya hay sesión,
+    redirigen al dashboard (el usuario autenticado no vuelve a la landing/login).
+  - Protegidas (ProtectedRoute): TODO lo demás, incluido el 404 → exigen sesión
+    y redirigen a /login si no la hay.
+  Para añadir una página protegida: crear el componente en src/routes/pages/
+  y su <Route> DENTRO del grupo protegido.
 */
 export default function AppRoutes() {
   return (
     <Routes>
-      {/* Públicas */}
-      <Route path="/" element={<WelcomePage />} />
-      <Route path="/login" element={<LoginPage />} />
+      {/* Solo para usuarios SIN sesión */}
+      <Route element={<PublicOnlyRoute />}>
+        <Route path="/" element={<WelcomePage />} />
+        <Route path="/login" element={<LoginPage />} />
+      </Route>
 
-      {/* Protegidas: exigen sesión (redirigen a /login si no la hay) */}
+      {/* Requieren sesión (redirigen a /login si no la hay) */}
       <Route element={<ProtectedRoute />}>
         <Route path="/dashboard" element={<DashboardPage />} />
         <Route path="*" element={<NotFoundPage />} />
